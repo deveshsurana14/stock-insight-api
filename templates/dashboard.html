@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock Insight API</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; padding: 2rem; }
+    h1 { font-size: 1.8rem; font-weight: 600; margin-bottom: 0.25rem; color: #f8fafc; }
+    p.sub { color: #94a3b8; margin-bottom: 2rem; font-size: 0.9rem; }
+    .search { display: flex; gap: 12px; margin-bottom: 2rem; }
+    input { flex: 1; padding: 10px 16px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #f1f5f9; font-size: 1rem; outline: none; }
+    input:focus { border-color: #6366f1; }
+    button { padding: 10px 24px; border-radius: 8px; background: #6366f1; color: white; border: none; cursor: pointer; font-size: 1rem; font-weight: 500; }
+    button:hover { background: #4f46e5; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 2rem; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.25rem; }
+    .card .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .card .value { font-size: 1.5rem; font-weight: 600; color: #f1f5f9; }
+    .card .sub { font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem; }
+    .signal { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 0.85rem; }
+    .STRONG.BUY { background: #064e3b; color: #34d399; }
+    .BUY { background: #052e16; color: #4ade80; }
+    .HOLD { background: #1e293b; color: #94a3b8; }
+    .SELL { background: #431407; color: #fb923c; }
+    .STRONG.SELL { background: #450a0a; color: #f87171; }
+    .reasons { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.25rem; margin-bottom: 2rem; }
+    .reasons h3 { font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+    .reasons li { font-size: 0.9rem; color: #cbd5e1; margin-bottom: 0.4rem; list-style: none; padding-left: 1rem; position: relative; }
+    .reasons li::before { content: "→"; position: absolute; left: 0; color: #6366f1; }
+    .error { color: #f87171; font-size: 0.9rem; margin-top: 0.5rem; }
+    .loading { color: #64748b; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>📈 Stock Insight API</h1>
+  <p class="sub">Real-time technical analysis engine</p>
+
+  <div class="search">
+    <input id="ticker" type="text" placeholder="Enter ticker — e.g. AAPL, RELIANCE.NS" value="AAPL" />
+    <button onclick="analyze()">Analyze</button>
+  </div>
+
+  <div id="output"></div>
+
+  <script>
+    const BASE = "http://localhost:5000";
+
+    async function analyze() {
+      const ticker = document.getElementById("ticker").value.trim().toUpperCase();
+      const out = document.getElementById("output");
+      out.innerHTML = '<p class="loading">Fetching data...</p>';
+
+      try {
+        const [quoteRes, scoreRes] = await Promise.all([
+          fetch(`${BASE}/quote/${ticker}`),
+          fetch(`${BASE}/score/${ticker}`)
+        ]);
+        const quote = await quoteRes.json();
+        const scored = await scoreRes.json();
+
+        if (quote.error || scored.error) {
+          out.innerHTML = `<p class="error">❌ ${quote.error || scored.error}</p>`;
+          return;
+        }
+
+        const signalClass = scored.signal.replace(" ", ".");
+        out.innerHTML = `
+          <div class="cards">
+            <div class="card">
+              <div class="label">Price</div>
+              <div class="value">$${quote.price}</div>
+              <div class="sub">${quote.change_pct > 0 ? "▲" : "▼"} ${quote.change_pct}% today</div>
+            </div>
+            <div class="card">
+              <div class="label">Signal</div>
+              <div class="value"><span class="signal ${signalClass}">${scored.signal}</span></div>
+              <div class="sub">Score: ${scored.score}/4</div>
+            </div>
+            <div class="card">
+              <div class="label">RSI (14)</div>
+              <div class="value">${scored.rsi}</div>
+              <div class="sub">${scored.rsi < 30 ? "Oversold" : scored.rsi > 70 ? "Overbought" : "Neutral"}</div>
+            </div>
+            <div class="card">
+              <div class="label">Volume</div>
+              <div class="value">${(quote.volume / 1e6).toFixed(2)}M</div>
+              <div class="sub">Today's volume</div>
+            </div>
+          </div>
+          <div class="reasons">
+            <h3>Analysis breakdown</h3>
+            <ul>${scored.reasons.map(r => `<li>${r}</li>`).join("")}</ul>
+          </div>
+        `;
+      } catch (e) {
+        out.innerHTML = `<p class="error">❌ Could not connect to API. Is Flask running?</p>`;
+      }
+    }
+
+    analyze();
+  </script>
+</body>
+</html>
