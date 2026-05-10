@@ -23,6 +23,11 @@ def get_close(ticker, period="3mo"):
 
 @app.route("/")
 def index():
+    return render_template("dashboard.html")
+
+
+@app.route("/api")
+def api_info():
     return jsonify({
         "name": "Stock Insight API",
         "version": "1.0",
