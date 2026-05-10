@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: stock-insight-api
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python -c "import cmdstanpy; cmdstanpy.install_cmdstan(verbose=False)"
+    startCommand: gunicorn app:app --timeout 120 --workers 1

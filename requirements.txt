@@ -1,5 +1,7 @@
 flask
-yfinance
-pandas
 flask-cors
 gunicorn
+yfinance
+pandas
+prophet
+vaderSentiment

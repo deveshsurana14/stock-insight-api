@@ -20,32 +20,70 @@
     .card .value { font-size: 1.5rem; font-weight: 600; color: #f1f5f9; }
     .card .sub { font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem; }
     .signal { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: 600; font-size: 0.85rem; }
-    .STRONG.BUY { background: #064e3b; color: #34d399; }
+    .STRONG\.BUY, .signal.STRONG\.BUY { background: #064e3b; color: #34d399; }
     .BUY { background: #052e16; color: #4ade80; }
-    .HOLD { background: #1e293b; color: #94a3b8; }
+    .HOLD { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
     .SELL { background: #431407; color: #fb923c; }
-    .STRONG.SELL { background: #450a0a; color: #f87171; }
-    .reasons { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.25rem; margin-bottom: 2rem; }
-    .reasons h3 { font-size: 0.85rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+    .STRONG\.SELL { background: #450a0a; color: #f87171; }
+    .panel { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
+    .panel h3 { font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
     .reasons li { font-size: 0.9rem; color: #cbd5e1; margin-bottom: 0.4rem; list-style: none; padding-left: 1rem; position: relative; }
     .reasons li::before { content: "→"; position: absolute; left: 0; color: #6366f1; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+    @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* Forecast table */
+    .forecast-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .forecast-table th { color: #64748b; font-weight: 500; text-align: left; padding: 0 0 0.5rem 0; border-bottom: 1px solid #334155; }
+    .forecast-table td { padding: 0.45rem 0; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
+    .forecast-table td:first-child { color: #94a3b8; }
+    .forecast-table td.price { color: #f1f5f9; font-weight: 600; }
+
+    /* Sentiment */
+    .sent-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.75rem; }
+    .sent-badge.bullish { background: #052e16; color: #4ade80; }
+    .sent-badge.bearish { background: #450a0a; color: #f87171; }
+    .sent-badge.neutral  { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .headline-list { list-style: none; }
+    .headline-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 0.82rem; color: #cbd5e1; padding: 0.35rem 0; border-bottom: 1px solid #1a2332; }
+    .headline-list li:last-child { border-bottom: none; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    .dot.bullish { background: #4ade80; }
+    .dot.bearish { background: #f87171; }
+    .dot.neutral  { background: #64748b; }
+
     .error { color: #f87171; font-size: 0.9rem; margin-top: 0.5rem; }
     .loading { color: #64748b; font-size: 0.9rem; }
+    .skeleton { background: #1e293b; border-radius: 12px; height: 120px; animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
   </style>
 </head>
 <body>
-  <h1>📈 Stock Insight API</h1>
-  <p class="sub">Real-time technical analysis engine</p>
+  <h1>Stock Insight API</h1>
+  <p class="sub">Technical analysis · ML forecast · News sentiment</p>
 
   <div class="search">
-    <input id="ticker" type="text" placeholder="Enter ticker — e.g. AAPL, RELIANCE.NS" value="AAPL" />
+    <input id="ticker" type="text" placeholder="e.g. AAPL, TCS.NS, TSLA, INFY.NS" value="AAPL"
+      onkeydown="if(event.key==='Enter') analyze()" />
     <button onclick="analyze()">Analyze</button>
   </div>
+  <p class="sub" style="margin-top:-1.4rem; margin-bottom:1.8rem; font-size:0.78rem;">
+    US stocks: <code style="color:#6366f1">AAPL TSLA MSFT GOOGL</code> &nbsp;·&nbsp;
+    Indian (NSE): <code style="color:#6366f1">TCS.NS INFY.NS WIPRO.NS HDFCBANK.NS RELIANCE.NS</code>
+  </p>
 
   <div id="output"></div>
 
   <script>
-    const BASE = "";
+    function signalClass(sig) {
+      return sig.replace(" ", ".");
+    }
+
+    function sentColor(s) {
+      if (s >= 0.05) return "bullish";
+      if (s <= -0.05) return "bearish";
+      return "neutral";
+    }
 
     async function analyze() {
       const ticker = document.getElementById("ticker").value.trim().toUpperCase();
@@ -53,19 +91,52 @@
       out.innerHTML = '<p class="loading">Fetching data...</p>';
 
       try {
-        const [quoteRes, scoreRes] = await Promise.all([
-          fetch(`${BASE}/quote/${ticker}`),
-          fetch(`${BASE}/score/${ticker}`)
+        const [quoteRes, scoreRes, predictRes, sentRes] = await Promise.all([
+          fetch(`/quote/${ticker}`),
+          fetch(`/score/${ticker}`),
+          fetch(`/predict/${ticker}?days=7`),
+          fetch(`/sentiment/${ticker}`)
         ]);
-        const quote = await quoteRes.json();
-        const scored = await scoreRes.json();
+
+        const quote   = await quoteRes.json();
+        const scored  = await scoreRes.json();
+        const predict = await predictRes.json();
+        const sent    = await sentRes.json();
 
         if (quote.error || scored.error) {
           out.innerHTML = `<p class="error">❌ ${quote.error || scored.error}</p>`;
           return;
         }
 
-        const signalClass = scored.signal.replace(" ", ".");
+        const sc = signalClass(scored.signal);
+
+        // forecast rows
+        const forecastRows = predict.error ? `<tr><td colspan="4" style="color:#f87171">No forecast available</td></tr>` :
+          predict.forecast.map(f => `
+            <tr>
+              <td>${f.date}</td>
+              <td class="price">$${f.predicted_price}</td>
+              <td>$${f.lower_bound}</td>
+              <td>$${f.upper_bound}</td>
+            </tr>`).join("");
+
+        // sentiment section
+        const sentOverall = sent.error ? null : sent.overall_sentiment;
+        const sentSection = sent.error
+          ? `<p style="color:#64748b;font-size:0.85rem">No recent news found.</p>`
+          : `
+            <span class="sent-badge ${sentOverall}">${sentOverall.toUpperCase()}</span>
+            <div style="font-size:0.78rem;color:#64748b;margin-bottom:0.75rem">
+              Avg score: ${sent.avg_score} &nbsp;·&nbsp; ${sent.articles_analyzed} articles
+            </div>
+            <ul class="headline-list">
+              ${sent.headlines.slice(0, 6).map(h => `
+                <li>
+                  <span class="dot ${h.sentiment}"></span>
+                  <span>${h.headline}</span>
+                </li>`).join("")}
+            </ul>`;
+
         out.innerHTML = `
           <div class="cards">
             <div class="card">
@@ -75,8 +146,8 @@
             </div>
             <div class="card">
               <div class="label">Signal</div>
-              <div class="value"><span class="signal ${signalClass}">${scored.signal}</span></div>
-              <div class="sub">Score: ${scored.score}/4</div>
+              <div class="value"><span class="signal ${sc}">${scored.signal}</span></div>
+              <div class="sub">Score: ${scored.score} / 4</div>
             </div>
             <div class="card">
               <div class="label">RSI (14)</div>
@@ -89,7 +160,30 @@
               <div class="sub">Today's volume</div>
             </div>
           </div>
-          <div class="reasons">
+
+          <div class="two-col">
+            <div class="panel">
+              <h3>7-Day ML Forecast (Prophet)</h3>
+              <table class="forecast-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Predicted</th>
+                    <th>Low</th>
+                    <th>High</th>
+                  </tr>
+                </thead>
+                <tbody>${forecastRows}</tbody>
+              </table>
+            </div>
+
+            <div class="panel">
+              <h3>News Sentiment (VADER NLP)</h3>
+              ${sentSection}
+            </div>
+          </div>
+
+          <div class="panel reasons">
             <h3>Analysis breakdown</h3>
             <ul>${scored.reasons.map(r => `<li>${r}</li>`).join("")}</ul>
           </div>

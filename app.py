@@ -3,6 +3,8 @@ from flask_cors import CORS
 from data_fetcher import get_stock_data, get_current_price
 from indicators import rsi, macd, bollinger_bands
 from scorer import score_stock
+from predictor import predict_price
+from sentiment import get_sentiment
 import cache
 
 app = Flask(__name__)
@@ -28,7 +30,9 @@ def index():
             "/quote/<ticker>",
             "/indicators/<ticker>",
             "/score/<ticker>",
-            "/compare?tickers=AAPL,MSFT"
+            "/compare?tickers=AAPL,MSFT",
+            "/predict/<ticker>?days=7",
+            "/sentiment/<ticker>"
         ]
     })
 
@@ -163,6 +167,41 @@ def compare():
 
     results.sort(key=lambda x: x["score"], reverse=True)
     return jsonify(results)
+
+
+@app.route("/predict/<ticker>")
+def predict(ticker):
+    ticker = ticker.upper()
+    days = min(max(request.args.get("days", 7, type=int), 1), 30)
+
+    cache_key = f"{ticker}_predict_{days}"
+    cached = cache.get(cache_key)
+    if cached:
+        return jsonify(cached)
+
+    forecast = predict_price(ticker, days)
+    if forecast is None:
+        return jsonify({"error": f"No data found for {ticker}"}), 404
+
+    result = {"ticker": ticker, "forecast_days": days, "forecast": forecast}
+    cache.set(cache_key, result, ttl=3600)
+    return jsonify(result)
+
+
+@app.route("/sentiment/<ticker>")
+def sentiment_route(ticker):
+    ticker = ticker.upper()
+    cached = cache.get(ticker + "_sentiment")
+    if cached:
+        return jsonify(cached)
+
+    data = get_sentiment(ticker)
+    if data is None:
+        return jsonify({"error": f"No news found for {ticker}"}), 404
+
+    data["ticker"] = ticker
+    cache.set(ticker + "_sentiment", data, ttl=1800)
+    return jsonify(data)
 
 
 # ─── Dashboard Route ─────────────────────────────────────
